@@ -1,10 +1,7 @@
 # BUPT 2019-nCoV Report Bot
-
-[Click here to try Online](https://t.me/buptncovbot)
-
 ## Requirements
 
-- Python3 (dev with 3.7.4)
+- Python3 (dev with 3.6.9)
 - pip
 
 Run `pip install -r requirements.txt` to install required components.
@@ -12,9 +9,8 @@ Run `pip install -r requirements.txt` to install required components.
 ## Deployment
 
 1. Copy `include/config.example.py` to `include/config.py`.
-2. Fill `TG_BOT_TOKEN`, `TG_BOT_MASTER` in `include/config.py` with your own bot token and administrator's telegram userid.
-3. Run `python main.py --initdb` **once** to initialize SQLite database (my_app.db).
-4. Run `python main.py` to start the bot. 
+2. Run `python main.py --initdb` **once** to initialize SQLite database (my_app.db).
+3. Run `python main.py` to start the bot. 
 
 By default, the bot will checkin all the normal accounts at 0:10 *UTC+8*, and retry the failed ones at 0:25.
 You can change this behavior in `include/config.py`.
@@ -37,3 +33,7 @@ Pull requests and issues are always welcome.
 ## Credit
 
 Special thanks to [ipid/bupt-ncov-report](https://github.com/ipid/bupt-ncov-report).
+
+## What does this fork do?
+
+Remove tgbot interface, implement a simple command line interface.
