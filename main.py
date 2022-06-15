@@ -1,3 +1,6 @@
+import os
+import platform
+
 import argparse
 import datetime
 import logging
@@ -5,7 +8,6 @@ import signal
 import traceback
 from logging.handlers import TimedRotatingFileHandler
 from shutil import copyfile
-from typing import List
 
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -14,7 +16,7 @@ from peewee import SqliteDatabase
 from include import *
 
 
-def get_users_by_seqids(seqids: List[int]):
+def get_users_by_seqids(seqids: list[int]):
     available_targets = get_buptusers()
     assert max(seqids) <= len(available_targets), "Seqid out of range."
     return [available_targets[i - 1] for i in seqids]
@@ -25,215 +27,6 @@ def get_buptusers(include_all=False):
         return BUPTUser.select()
     else:
         return BUPTUser.select().where(BUPTUser.status != BUPTUserStatus.removed)
-
-
-def list():
-    print(f"用户列表查询中 ...\n")
-    users = get_buptusers()
-    ret_msgs = []
-    ret_msg = ""
-    for i, user in enumerate(users):
-        if i % 10 == 0 and i != 0:
-            ret_msgs.append(ret_msg)
-            ret_msg = ""
-        id = i + 1
-        ret_msg += f"ID: `{id}`\n"
-        if user.username != None:
-            ret_msg += (
-                f"Username: `{user.username}`\n"  # Password: `{user.password}`\n'
-            )
-        else:
-            ret_msg += f"eai-sess: `{user.cookie_eaisess}`\n"  # UUKey: `{user.cookie_uukey}`\n'
-        if user.status == BUPTUserStatus.normal:
-            ret_msg += f"自动签到: `启用`\n"
-        else:
-            ret_msg += f"自动签到: `暂停`\n"
-        if user.xisu_checkin_status == BUPTUserStatus.normal:
-            ret_msg += f"自动晨午晚检: `启用`\n"
-        else:
-            ret_msg += f"自动晨午晚检: `暂停`\n"
-        if user.latest_response_data == None:
-            ret_msg += "从未尝试签到\n"
-        else:
-            ret_msg += f"最后签到时间: `{user.latest_response_time}`\n"
-            ret_msg += f"最后签到返回: `{user.latest_response_data[:100]}`\n"
-
-        if user.latest_xisu_checkin_response_data == None:
-            ret_msg += "从未尝试晨午晚检签到\n"
-        else:
-            ret_msg += f"最后晨午晚检签到时间: `{user.latest_xisu_checkin_response_time}`\n"
-            ret_msg += f"最后晨午晚检签到返回: `{user.latest_xisu_checkin_response_data[:100]}`\n"
-
-        ret_msg += f"暂停 pause {id}   恢复 resume {id}\n签到 checkin {id} 删除 remove {id}\n晨午晚检签到 checkinxisu {id}\n"
-        ret_msg += f"暂停自动晨午晚检 pausexisu {id} 恢复自动晨午晚检 resumexisu {id}\n"
-        ret_msg += "\n"
-    ret_msgs.append(ret_msg)
-
-    if len(users) == 0:
-        ret_msgs = ["用户列表为空"]
-    if len(users) >= 2:
-        ret_msgs[
-            -1
-        ] += f"恢复全部 resume  暂停全部 pause\n签到全部 checkin  删除全部 remove all \n晨午晚检签到 checkinxisu\n暂停自动晨午晚检 pausexisu 恢复自动晨午晚检 resumexisu\n"
-    logger.debug(ret_msgs)
-
-    for msg in ret_msgs:
-        print(msg)
-
-
-def add_by_cookie(args: List[str]):
-    if len(args) != 2:
-        print(
-            f"例：add_by_cookie `1cmgkrrcssge6edkkg3ucigj1m` `44f522350f5e843fbac58b726753eb36`"
-        )
-        return
-    eaisess = args[0]
-    uukey = args[1]
-    print(f"Adding ...")
-
-    buptuser, _ = BUPTUser.get_or_create(
-        cookie_eaisess=eaisess,
-        cookie_uukey=uukey,
-        status=BUPTUserStatus.normal,
-        xisu_checkin_status=BUPTUserStatus.normal,
-    )
-
-    print("添加成功！")
-    list()
-
-
-def add_by_uid(args: List[str]):
-    if len(args) != 2:
-        print(f"例：add_by_uid `2010211000` `password123`")
-        return
-    username = args[0]
-    password = args[1]
-    print(f"Adding ...")
-
-    buptuser, _ = BUPTUser.get_or_create(
-        username=username,
-        password=password,
-        status=BUPTUserStatus.normal,
-        xisu_checkin_status=BUPTUserStatus.normal,
-    )
-
-    print("添加成功！")
-    list()
-
-
-def checkin(args: List[str]):
-    if len(args) == 0:
-        targets = get_buptusers()
-    else:
-        targets = get_users_by_seqids([int(i) for i in args])
-
-    if len(targets) == 0:
-        print("用户列表为空")
-        return
-    for buptuser in targets:
-        try:
-            ret = buptuser.ncov_checkin(force=True)[:100]
-            ret_msg = f"用户：`{buptuser.username or buptuser.cookie_eaisess or '[None]'}`\n签到成功！\n服务器返回：`{ret}`"
-        except requests.exceptions.Timeout as e:
-            ret_msg = f"用户：`{buptuser.username or buptuser.cookie_eaisess or '[None]'}`\n签到失败，服务器错误！\n`{e}`"
-        except Exception as e:
-            ret_msg = f"用户：`{buptuser.username or buptuser.cookie_eaisess or '[None]'}`\n签到异常！\n服务器返回：`{e}`"
-        print(ret_msg)
-
-
-def checkinxisu(args: List[str]):
-    if len(args) == 0:
-        targets = get_buptusers()
-    else:
-        targets = get_users_by_seqids([int(i) for i in args])
-
-    if len(targets) == 0:
-        print("用户列表为空")
-        return
-    for buptuser in targets:
-        try:
-            ret = buptuser.xisu_ncov_checkin(force=True)[:100]
-            ret_msg = f"用户：`{buptuser.username or buptuser.cookie_eaisess or '[None]'}`\n晨午晚检成功！\n服务器返回：`{ret}`"
-        except requests.exceptions.Timeout as e:
-            ret_msg = f"用户：`{buptuser.username or buptuser.cookie_eaisess or '[None]'}`\n晨午晚检失败，服务器错误！\n`{e}`"
-        except Exception as e:
-            ret_msg = f"用户：`{buptuser.username or buptuser.cookie_eaisess or '[None]'}`\n晨午晚检异常！\n服务器返回：`{e}`"
-        print(ret_msg)
-
-
-def pausexisu(args: List[str]):
-    if len(args) == 0:
-        targets = get_buptusers()
-    else:
-        targets = get_users_by_seqids([int(i) for i in args])
-
-    for buptuser in targets:
-        buptuser.xisu_checkin_status = BUPTUserStatus.stopped
-        buptuser.save()
-        ret_msg = f"用户：`{buptuser.username or buptuser.cookie_eaisess or '[None]'}`\n已暂停自动晨午晚检。"
-        print(ret_msg)
-
-
-def resumexisu(args: List[str]):
-    if len(args) == 0:
-        targets = get_buptusers()
-    else:
-        targets = get_users_by_seqids([int(i) for i in args])
-
-    for buptuser in targets:
-        buptuser.xisu_checkin_status = BUPTUserStatus.normal
-        buptuser.save()
-        ret_msg = f"用户：`{buptuser.username or buptuser.cookie_eaisess or '[None]'}`\n已启用自动晨午晚检。"
-        print(ret_msg)
-
-
-def pause(args: List[str]):
-    if len(args) == 0:
-        targets = get_buptusers()
-    else:
-        targets = get_users_by_seqids([int(i) for i in args])
-
-    for buptuser in targets:
-        buptuser.status = BUPTUserStatus.stopped
-        buptuser.save()
-        ret_msg = (
-            f"用户：`{buptuser.username or buptuser.cookie_eaisess or '[None]'}`\n已暂停自动签到。"
-        )
-        print(ret_msg)
-
-
-def resume(args: List[str]):
-    if len(args) == 0:
-        targets = get_buptusers()
-    else:
-        targets = get_users_by_seqids([int(i) for i in args])
-
-    for buptuser in targets:
-        buptuser.status = BUPTUserStatus.normal
-        buptuser.save()
-        ret_msg = (
-            f"用户：`{buptuser.username or buptuser.cookie_eaisess or '[None]'}`\n已启用自动签到。"
-        )
-        print(ret_msg)
-
-
-def remove(args: List[str]):
-    assert len(args) > 0, "错误的命令，请用 help 查看使用帮助。"
-
-    if args[0].lower() == "all":
-        targets = get_buptusers()
-    else:
-        targets = get_users_by_seqids([int(i) for i in args])
-
-    for buptuser in targets:
-        buptuser.status = BUPTUserStatus.removed
-        buptuser.save()
-        ret_msg = (
-            f"用户：`{buptuser.username or buptuser.cookie_eaisess or '[None]'}`\n已删除。"
-        )
-        print(ret_msg)
-
-    list()
 
 
 def error_callback(error: Exception):
@@ -248,18 +41,6 @@ def error_callback(error: Exception):
     traceback.print_exc()
 
 
-def status():
-    cron_data = "\n".join(
-        [
-            "name: %s, trigger: %s, handler: %s, next: %s"
-            % (job.name, job.trigger, job.func, job.next_run_time)
-            for job in scheduler.get_jobs()
-        ]
-    )
-    print("Cronjob:\n" + cron_data)
-    print("System time:\n" + str(datetime.datetime.now()))
-
-
 def backup_db():
     global logger
     logger.info("backup started!")
@@ -270,6 +51,229 @@ def backup_db():
         ),
     )
     logger.info("backup finished!")
+
+
+class Shell:
+    def list_all(self, args: list[str]) -> None:
+        print(f"用户列表查询中 ...\n")
+        users = get_buptusers()
+        ret_msgs = []
+        ret_msg = ""
+        for i, user in enumerate(users):
+            if i % 10 == 0 and i != 0:
+                ret_msgs.append(ret_msg)
+                ret_msg = ""
+            id = i + 1
+            ret_msg += f"ID: `{id}`\n"
+            if user.username != None:
+                ret_msg += (
+                    f"Username: `{user.username}`\n"  # Password: `{user.password}`\n'
+                )
+            else:
+                ret_msg += f"eai-sess: `{user.cookie_eaisess}`\n"  # UUKey: `{user.cookie_uukey}`\n'
+            if user.status == BUPTUserStatus.normal:
+                ret_msg += f"自动签到: `启用`\n"
+            else:
+                ret_msg += f"自动签到: `暂停`\n"
+            if user.xisu_checkin_status == BUPTUserStatus.normal:
+                ret_msg += f"自动晨午晚检: `启用`\n"
+            else:
+                ret_msg += f"自动晨午晚检: `暂停`\n"
+            if user.latest_response_data == None:
+                ret_msg += "从未尝试签到\n"
+            else:
+                ret_msg += f"最后签到时间: `{user.latest_response_time}`\n"
+                ret_msg += f"最后签到返回: `{user.latest_response_data[:100]}`\n"
+
+            if user.latest_xisu_checkin_response_data == None:
+                ret_msg += "从未尝试晨午晚检签到\n"
+            else:
+                ret_msg += f"最后晨午晚检签到时间: `{user.latest_xisu_checkin_response_time}`\n"
+                ret_msg += (
+                    f"最后晨午晚检签到返回: `{user.latest_xisu_checkin_response_data[:100]}`\n"
+                )
+
+            ret_msg += f"暂停 pause {id}   恢复 resume {id}\n签到 checkin {id} 删除 remove {id}\n晨午晚检签到 checkinxisu {id}\n"
+            ret_msg += f"暂停自动晨午晚检 pausexisu {id} 恢复自动晨午晚检 resumexisu {id}\n"
+            ret_msg += "\n"
+        ret_msgs.append(ret_msg)
+
+        if len(users) == 0:
+            ret_msgs = ["用户列表为空"]
+        if len(users) >= 2:
+            ret_msgs[
+                -1
+            ] += f"恢复全部 resume  暂停全部 pause\n签到全部 checkin  删除全部 remove all \n晨午晚检签到 checkinxisu\n暂停自动晨午晚检 pausexisu 恢复自动晨午晚检 resumexisu\n"
+        logger.debug(ret_msgs)
+
+        for msg in ret_msgs:
+            print(msg)
+
+    def add_by_cookie(self, args: list[str]) -> None:
+        if len(args) != 2:
+            print(
+                f"例：add_by_cookie `1cmgkrrcssge6edkkg3ucigj1m` `44f522350f5e843fbac58b726753eb36`"
+            )
+            return
+        eaisess = args[0]
+        uukey = args[1]
+        print(f"Adding ...")
+
+        buptuser, _ = BUPTUser.get_or_create(
+            cookie_eaisess=eaisess,
+            cookie_uukey=uukey,
+            status=BUPTUserStatus.normal,
+            xisu_checkin_status=BUPTUserStatus.normal,
+        )
+
+        print("添加成功！")
+        list()
+
+    def add_by_uid(self, args: list[str]) -> None:
+        if len(args) != 2:
+            print(f"例：add_by_uid `2010211000` `password123`")
+            return
+        username = args[0]
+        password = args[1]
+        print(f"Adding ...")
+
+        buptuser, _ = BUPTUser.get_or_create(
+            username=username,
+            password=password,
+            status=BUPTUserStatus.normal,
+            xisu_checkin_status=BUPTUserStatus.normal,
+        )
+
+        print("添加成功！")
+        list()
+
+    def checkin(self, args: list[str]) -> None:
+        if len(args) == 0:
+            targets = get_buptusers()
+        else:
+            targets = get_users_by_seqids([int(i) for i in args])
+
+        if len(targets) == 0:
+            print("用户列表为空")
+            return
+        for buptuser in targets:
+            try:
+                ret = buptuser.ncov_checkin(force=True)[:100]
+                ret_msg = f"用户：`{buptuser.username or buptuser.cookie_eaisess or '[None]'}`\n签到成功！\n服务器返回：`{ret}`"
+            except requests.exceptions.Timeout as e:
+                ret_msg = f"用户：`{buptuser.username or buptuser.cookie_eaisess or '[None]'}`\n签到失败，服务器错误！\n`{e}`"
+            except Exception as e:
+                ret_msg = f"用户：`{buptuser.username or buptuser.cookie_eaisess or '[None]'}`\n签到异常！\n服务器返回：`{e}`"
+            print(ret_msg)
+
+    def checkinxisu(self, args: list[str]) -> None:
+        if len(args) == 0:
+            targets = get_buptusers()
+        else:
+            targets = get_users_by_seqids([int(i) for i in args])
+
+        if len(targets) == 0:
+            print("用户列表为空")
+            return
+        for buptuser in targets:
+            try:
+                ret = buptuser.xisu_ncov_checkin(force=True)[:100]
+                ret_msg = f"用户：`{buptuser.username or buptuser.cookie_eaisess or '[None]'}`\n晨午晚检成功！\n服务器返回：`{ret}`"
+            except requests.exceptions.Timeout as e:
+                ret_msg = f"用户：`{buptuser.username or buptuser.cookie_eaisess or '[None]'}`\n晨午晚检失败，服务器错误！\n`{e}`"
+            except Exception as e:
+                ret_msg = f"用户：`{buptuser.username or buptuser.cookie_eaisess or '[None]'}`\n晨午晚检异常！\n服务器返回：`{e}`"
+            print(ret_msg)
+
+    def pausexisu(self, args: list[str]) -> None:
+        if len(args) == 0:
+            targets = get_buptusers()
+        else:
+            targets = get_users_by_seqids([int(i) for i in args])
+
+        for buptuser in targets:
+            buptuser.xisu_checkin_status = BUPTUserStatus.stopped
+            buptuser.save()
+            ret_msg = f"用户：`{buptuser.username or buptuser.cookie_eaisess or '[None]'}`\n已暂停自动晨午晚检。"
+            print(ret_msg)
+
+    def resumexisu(self, args: list[str]) -> None:
+        if len(args) == 0:
+            targets = get_buptusers()
+        else:
+            targets = get_users_by_seqids([int(i) for i in args])
+
+        for buptuser in targets:
+            buptuser.xisu_checkin_status = BUPTUserStatus.normal
+            buptuser.save()
+            ret_msg = f"用户：`{buptuser.username or buptuser.cookie_eaisess or '[None]'}`\n已启用自动晨午晚检。"
+            print(ret_msg)
+
+    def pause(self, args: list[str]) -> None:
+        if len(args) == 0:
+            targets = get_buptusers()
+        else:
+            targets = get_users_by_seqids([int(i) for i in args])
+
+        for buptuser in targets:
+            buptuser.status = BUPTUserStatus.stopped
+            buptuser.save()
+            ret_msg = f"用户：`{buptuser.username or buptuser.cookie_eaisess or '[None]'}`\n已暂停自动签到。"
+            print(ret_msg)
+
+    def resume(self, args: list[str]) -> None:
+        if len(args) == 0:
+            targets = get_buptusers()
+        else:
+            targets = get_users_by_seqids([int(i) for i in args])
+
+        for buptuser in targets:
+            buptuser.status = BUPTUserStatus.normal
+            buptuser.save()
+            ret_msg = f"用户：`{buptuser.username or buptuser.cookie_eaisess or '[None]'}`\n已启用自动签到。"
+            print(ret_msg)
+
+    def remove(self, args: list[str]) -> None:
+        assert len(args) > 0, "错误的命令，请用 help 查看使用帮助。"
+
+        if args[0].lower() == "all":
+            targets = get_buptusers()
+        else:
+            targets = get_users_by_seqids([int(i) for i in args])
+
+        for buptuser in targets:
+            buptuser.status = BUPTUserStatus.removed
+            buptuser.save()
+            ret_msg = (
+                f"用户：`{buptuser.username or buptuser.cookie_eaisess or '[None]'}`\n已删除。"
+            )
+            print(ret_msg)
+
+        list()
+
+    def status(self, args: list[str]) -> None:
+        cron_data = "\n".join(
+            [
+                "name: %s, trigger: %s, handler: %s, next: %s"
+                % (job.name, job.trigger, job.func, job.next_run_time)
+                for job in scheduler.get_jobs()
+            ]
+        )
+        print("Cronjob:\n" + cron_data)
+        print("System time:\n" + str(datetime.datetime.now()))
+
+    def help(self, args: list[str]) -> None:
+        print(HELP_MSG)
+
+    def clear(self, args: list[str]) -> None:
+        if platform.system() == "Windows":
+            os.system("cls")
+        else:
+            os.system("clear")
+
+    def exit(self, args: list[str]) -> None:
+        scheduler.shutdown(wait=True)
+        exit(0)
 
 
 def checkin_all_retry():
@@ -372,57 +376,44 @@ def checkin_all_xisu():
     logger.info("xisu_checkin_all finished!")
 
 
-def help():
-    print(HELP_MSG)
-
-
-def cmdline():
-    while True:
-        try:
-            iptstr = input()
-            splitstrs = iptstr.split(sep=" ")
-            command = splitstrs[0]
-            args = splitstrs[1:]
-            if command == "list":
-                list()
-            elif command == "add_by_cookie":
-                add_by_cookie(args)
-            elif command == "add_by_uid":
-                add_by_uid(args)
-            elif command == "checkin":
-                checkin(args)
-            elif command == "checkinxisu":
-                checkinxisu(args)
-            elif command == "pause":
-                pause(args)
-            elif command == "resume":
-                resume(args)
-            elif command == "pausexisu":
-                pausexisu(args)
-            elif command == "resumexisu":
-                resumexisu(args)
-            elif command == "remove":
-                remove(args)
-            elif command == "status":
-                status()
-            elif command == "backup_db":
-                backup_db()
-            elif command == "checkin_all":
-                checkin_all()
-            elif command == "checkinxisu_all":
-                checkin_all_xisu()
-            elif command == "help":
-                help()
-            else:
-                print("错误的命令，请用 help 查看使用帮助。")
-        except Exception as e:
-            error_callback(e)
-
-
 def exitgrace(signum, frame):
     print("Stop signal received, exiting...")
     scheduler.shutdown(wait=True)
     exit(0)
+
+
+def cmdline():
+    s = Shell()
+    print("bupt-ncov-report-cli")
+    while True:
+        try:
+            iptstr = input("command: ")
+            parsedargs: "list[str]"
+            parsedargs = []
+            sindex = 0
+            quoted = False
+            for i, iv in enumerate(iptstr):
+                if iv == '"':
+                    quoted = not quoted
+                elif iv == " " and not quoted:
+                    parsedargs.append(iptstr[sindex:i])
+                    sindex = i + 1
+            if sindex < len(iptstr):
+                parsedargs.append(iptstr[sindex:])
+            try:
+                while True:
+                    parsedargs.remove("")
+            except:
+                pass
+            if len(parsedargs) == 0:
+                continue
+            func = getattr(s, parsedargs[0], None)
+            if func:
+                func(parsedargs[1:])
+            else:
+                print(f"{parsedargs[0]}命令不存在，请用help命令查看使用帮助。")
+        except Exception as e:
+            error_callback(e)
 
 
 def main():

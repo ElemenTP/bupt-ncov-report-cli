@@ -45,7 +45,7 @@ HELP_MSG="""自动签到时间：每日0点10分
 请在使用本 bot 前，确保已经正确提交过一次上报。
 本 bot 的目标签到系统为：[app.bupt.edu.cn/ncov/...](https://app.bupt.edu.cn/ncov/wap/default/index)
 本 bot 的目标晨午晚检系统为：[app.bupt.edu.cn/site/...](https://app.bupt.edu.cn/site/ncov/xisudailyup)
-list
+list_all
   列出所有签到用户
 checkin
   立即执行签到

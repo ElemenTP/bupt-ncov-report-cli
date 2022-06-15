@@ -1,7 +1,7 @@
 # BUPT 2019-nCoV Report Bot
 ## Requirements
 
-- Python3 (dev with 3.6.9)
+- Python3 (dev with 3.10.4)
 - pip
 
 Run `pip install -r requirements.txt` to install required components.
